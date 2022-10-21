@@ -1,63 +1,70 @@
-import threading
-import time
-import random
-
+import sys
 import socket
 
 def server():
     try:
-        ss = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        ts1Socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        ts2Socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         print("[S]: Server socket created")
     except socket.error as err:
         print('socket open error: {}\n'.format(err))
         exit()
 
-    server_binding = ('', 50007)
-    ss.bind(server_binding)
-    ss.listen(1)
+    lsListenPort = int(sys.argv[1])
+    ts1Hostname = sys.argv[2]
+    ts1ListenPort = int(sys.argv[3])
+    ts2Hostname = sys.argv[4]
+    ts2ListenPort = int(sys.argv[5])
+
+    cs_server_binding = ('', lsListenPort)
+    clientSocket.bind(cs_server_binding)
+    clientSocket.listen(1)
     host = socket.gethostname()
     print("[S]: Server host name is {}".format(host))
     localhost_ip = (socket.gethostbyname(host))
     print("[S]: Server IP address is {}".format(localhost_ip))
-    csockid, addr = ss.accept()
+    csockid, addr = clientSocket.accept()
+    
     print ("[S]: Got a connection request from a client at {}".format(addr))
-    data_from_client = csockid.recv(100)
-    file1 = open("sample-out-proj.txt", "w")
-    clientData = ""
-    while(data_from_client):
-        # file1.writelines(data_from_server.decode('utf-8'))
-        # print(data_from_client)
-        clientData+=(data_from_client.decode('utf-8'))
-        data_from_client = csockid.recv(100)
-    ##print(clientData)
 
-    lines = clientData.split('\n')
-    ##print(lines)
-    # send a intro message to the client.  
-    # with open("in-proj.txt", "r+") as inProj:
-    #     # Reading form a file
-    #     msg = inProj.readlines()
-        
-    l = len(lines)
-    for i in range(0,l):
-        curLine = ""
-        curLine += lines[i].strip()[::-1]
-        if i != l-1:
-            curLine += "\r\n"
-        file1.writelines(curLine)
+    ts1_server_binding = (ts1Hostname, ts1ListenPort)
+    ts1Socket.connect(ts1_server_binding)
+    ts1Socket.settimeout(5)
 
-    # inProj.close()
+    ts2_server_binding = (ts2Hostname, ts2ListenPort)
+    ts2Socket.connect(ts2_server_binding)
+    ts2Socket.settimeout(5)
+
+    while (True):
+        data_from_client = csockid.recv(200).decode("utf-8").strip()
+        if(not(data_from_client)):
+            break
+
+        print("[LS] received from client: " + data_from_client)
+        ts1Socket.send(data_from_client.encode("utf-8"))
+        ts2Socket.send(data_from_client.encode("utf-8"))
+
+        try:
+            ts1Response = ts1Socket.recv(200).decode("utf-8")
+            print("[LS] TS1 Response received: " + ts1Response)
+            csockid.send(ts1Response.encode("utf-8"))
+        except socket.timeout:
+            try:
+                print("[LS]: Not found in [TS1]")
+                ts2Response = ts2Socket.recv(200).decode("utf-8")
+                print("[LS]: TS2 Response received: " + ts2Response)
+                csockid.send(ts2Response.encode("utf-8"))
+            except socket.timeout:
+                print("[LS]: Not found in [TS2]")
+                timeOutMessage = data_from_client + " - TIMED OUT"
+                csockid.send(timeOutMessage.encode("utf-8"))
+
     # Close the server socket
-    ss.close()
+    clientSocket.close()
+    ts1Socket.close()
     exit()
 
 if __name__ == "__main__":
-    t1 = threading.Thread(name='server', target=server)
-    t1.start()
-
-    time.sleep(random.random() * 5)
-    # t2 = threading.Thread(name='client', target=client)
-    # t2.start()
-
-    time.sleep(5)
+    server()
     print("Done.")

@@ -1,5 +1,6 @@
 import sys
 import socket
+import select
 
 def server():
     try:
@@ -30,35 +31,32 @@ def server():
 
     ts1_server_binding = (ts1Hostname, ts1ListenPort)
     ts1Socket.connect(ts1_server_binding)
-    ts1Socket.settimeout(5)
+
 
     ts2_server_binding = (ts2Hostname, ts2ListenPort)
     ts2Socket.connect(ts2_server_binding)
-    ts2Socket.settimeout(5)
+
 
     while (True):
         data_from_client = csockid.recv(200).decode("utf-8").strip()
         if(not(data_from_client)):
             break
-
+        
         print("[LS] received from client: " + data_from_client)
         ts1Socket.send(data_from_client.encode("utf-8"))
         ts2Socket.send(data_from_client.encode("utf-8"))
 
-        try:
-            ts1Response = ts1Socket.recv(200).decode("utf-8")
-            print("[LS] TS1 Response received: " + ts1Response)
-            csockid.send(ts1Response.encode("utf-8"))
-        except socket.timeout:
-            try:
-                print("[LS]: Not found in [TS1]")
-                ts2Response = ts2Socket.recv(200).decode("utf-8")
-                print("[LS]: TS2 Response received: " + ts2Response)
-                csockid.send(ts2Response.encode("utf-8"))
-            except socket.timeout:
-                print("[LS]: Not found in [TS2]")
-                timeOutMessage = data_from_client + " - TIMED OUT"
-                csockid.send(timeOutMessage.encode("utf-8"))
+        readReady, writeReady, errors = select.select([ts1Socket,ts2Socket],[],[],5)
+
+        if readReady:
+            tsResponse = readReady[0].recv(200).decode("utf-8")
+            print("[LS] TS1 Response received: " + tsResponse)
+            csockid.send(tsResponse.encode("utf-8"))
+        else:
+            print("[LS]: Not found in [TS]")
+            timeOutMessage = data_from_client + " - TIMED OUT"
+            csockid.send(timeOutMessage.encode("utf-8"))
+
 
     # Close the server socket
     clientSocket.close()
